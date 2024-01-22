@@ -1,0 +1,25 @@
+#!/bin/sh
+
+RED='\033[0;31m'
+NC='\033[0m'
+GREEN='\033[1;92m'
+
+
+local_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [[ $local_branch == "master" || $local_branch == "main" || $local_branch == "develop" ]]
+then
+    exit 0
+fi
+
+jira_branch_regex="^([A-Z]+-[0-9]+)(-[a-z0-9]+)*"
+
+if [[ $local_branch =~ $jira_branch_regex ]]
+then
+    jira_ticket=${BASH_REMATCH[1]}
+    echo "${GREEN}Your branch name is valid and contains a Jira ticket ($jira_ticket) ${NC}"
+    exit 0
+fi
+
+echo "${RED}Your branch name does not contain Jira ticket${NC}"
+exit 0

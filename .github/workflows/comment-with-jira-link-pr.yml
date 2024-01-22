@@ -1,0 +1,69 @@
+name: Add Comment With Jira Issue Link
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - develop
+      - main
+      - master
+
+jobs:
+  jira-link-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Extract Jira Ticket
+        run: |
+          JIRA_TICKET_BRANCH=$(echo ${{ github.head_ref }} | grep -oE '[A-Z]{2,}-[0-9]+')
+
+          if [ -n "$JIRA_TICKET_BRANCH" ]; then
+            echo "JIRA_TICKET_BRANCH=$JIRA_TICKET_BRANCH" >> $GITHUB_ENV
+            echo "Jira ticket found in branch name: $JIRA_TICKET_BRANCH"
+          else
+            echo "No Jira ticket found in the branch name."
+            exit 1
+          fi
+
+          JIRA_TICKET_COMMIT=$(git show -s --pretty=%B | grep -oE '[A-Z]{2,}-[0-9]+' | head -n 1)
+
+          if [ -n "$JIRA_TICKET_COMMIT" ]; then
+            echo "JIRA_TICKET_COMMIT=$JIRA_TICKET_COMMIT" >> $GITHUB_ENV
+            echo "Jira ticket found in last commit message: $JIRA_TICKET_COMMIT"
+          else
+            echo "No Jira ticket found in the last commit message"
+          fi
+
+      - name: Add Jira Link to Pull Request as Comment
+        run: |
+          JIRA_TICKET_BRANCH=$JIRA_TICKET_BRANCH
+          JIRA_TICKET_COMMIT=$JIRA_TICKET_COMMIT
+          JIRA_LINK_BRANCH="Jira issue link :point_right: [${JIRA_TICKET_BRANCH}](https://jira.storebrand.no/browse/${JIRA_TICKET_BRANCH}) <br><br>"
+          JIRA_LINK_COMMIT="Additional Jira issue from commit message :point_right: [${JIRA_TICKET_COMMIT}](https://jira.storebrand.no/browse/${JIRA_TICKET_COMMIT}) <br><br>"
+
+          CURRENT_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body)
+
+          if [[ "$CURRENT_BODY" != *"$JIRA_TICKET_BRANCH"* ]]; then
+            NEW_BODY="${JIRA_LINK_BRANCH}${CURRENT_BODY}"
+            gh pr edit ${{ github.event.pull_request.number }} --body "${NEW_BODY}"
+            echo "Jira Link ${JIRA_TICKET_BRANCH} added to the pull request description."
+          else
+            echo "Jira Link ${JIRA_TICKET_BRANCH} already present in the pull request description."
+          fi
+
+          CURRENT_BODY=$(gh pr view ${{ github.event.pull_request.number }} --json body -q .body)
+
+          if [ -n "$JIRA_TICKET_COMMIT" ] && [[ "$CURRENT_BODY" != *"$JIRA_TICKET_COMMIT"* ]] && [[ "$JIRA_TICKET_BRANCH" != "$JIRA_TICKET_COMMIT" ]]; then
+            NEW_BODY="${JIRA_LINK_COMMIT}${CURRENT_BODY}"
+            gh pr edit ${{ github.event.pull_request.number }} --body "${NEW_BODY}"
+            echo "Jira Link ${JIRA_TICKET_COMMIT} added to the pull request description."
+          fi
+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
